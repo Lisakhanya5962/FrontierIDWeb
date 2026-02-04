@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request
 from PIL import Image, ImageDraw, ImageFont
 import os
 from io import BytesIO
@@ -10,8 +10,11 @@ app = Flask(__name__)
 # ================= CONFIG =================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ASSETS_DIR = os.path.join(BASE_DIR, "static", "assets")
-OUTPUT_DIR = os.path.join(BASE_DIR, "static", "output")
+
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+ASSETS_DIR = os.path.join(STATIC_DIR, "assets")
+OUTPUT_DIR = os.path.join(STATIC_DIR, "output")
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 BACKGROUND_IMAGE = os.path.join(ASSETS_DIR, "background.jpeg")
@@ -23,32 +26,43 @@ HEADER_HEIGHT = 120
 GRAY = (80, 80, 80)
 PHOTO_BORDER = 6
 
-# Gmail App Password
-SENDER_EMAIL = "lisakhanya5962@gmail.com"
-SENDER_PASSWORD = "hocuaqytnuggqrku"  # <-- use your Gmail App Password
+# ✅ ENVIRONMENT VARIABLES (SAFE)
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
+SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 
 # ========================================
 
+
 def send_email(receiver, filename, image_bytes):
+    if not SENDER_EMAIL or not SENDER_PASSWORD:
+        print("Email skipped: credentials not set")
+        return
+
     try:
         msg = EmailMessage()
         msg["Subject"] = "Your Staff ID Card"
         msg["From"] = SENDER_EMAIL
         msg["To"] = receiver
-        msg.set_content("Hello,\n\nAttached is your Staff ID Card.\n\nFrontier Regional Hospital")
+        msg.set_content(
+            "Hello,\n\nAttached is your Staff ID Card.\n\nFrontier Regional Hospital"
+        )
 
-        msg.add_attachment(image_bytes,
-                           maintype="image",
-                           subtype="png",
-                           filename=filename)
+        msg.add_attachment(
+            image_bytes,
+            maintype="image",
+            subtype="png",
+            filename=filename
+        )
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
             smtp.login(SENDER_EMAIL, SENDER_PASSWORD)
             smtp.send_message(msg)
 
-        print(f"Email successfully sent to {receiver}")
+        print("Email sent successfully")
+
     except Exception as e:
         print("Email sending failed:", e)
+
 
 # ================== ROUTES ==================
 
@@ -66,7 +80,7 @@ def index():
         temp_photo = os.path.join(OUTPUT_DIR, "temp.png")
         photo.save(temp_photo)
 
-        # Load assets
+        # Load images
         background = Image.open(BACKGROUND_IMAGE).resize((CARD_WIDTH, CARD_HEIGHT))
         logo = Image.open(LOGO_IMAGE).resize((150, 80))
         photo_img = Image.open(temp_photo).resize((250, 300))
@@ -74,40 +88,37 @@ def index():
         card = background.copy()
         draw = ImageDraw.Draw(card)
 
-        # Gray header
+        # Header
         draw.rectangle([(0, 0), (CARD_WIDTH, HEADER_HEIGHT)], fill=GRAY)
 
-        # Paste logo
+        # Logo
         logo_y = (HEADER_HEIGHT - logo.height) // 2
         card.paste(logo, (30, logo_y), logo.convert("RGBA"))
 
-        # Fonts for staff
+        # Fonts
         try:
-            font_name = ImageFont.truetype("arialbd.ttf", 50)       # Name bigger & bold
-            font_position = ImageFont.truetype("arial.ttf", 32)     # Position
-            font_department = ImageFont.truetype("arial.ttf", 28)   # Department
-        except:
-            font_name = ImageFont.load_default()
-            font_position = ImageFont.load_default()
-            font_department = ImageFont.load_default()
-
-        # Font for hospital (smaller to fit)
-        try:
+            font_name = ImageFont.truetype("arialbd.ttf", 50)
+            font_position = ImageFont.truetype("arial.ttf", 32)
+            font_department = ImageFont.truetype("arial.ttf", 28)
             font_hospital = ImageFont.truetype("arialbd.ttf", 36)
         except:
-            font_hospital = ImageFont.load_default()
+            font_name = font_position = font_department = font_hospital = ImageFont.load_default()
 
-        # Center hospital name in header
+        # Hospital name centered
         bbox = draw.textbbox((0, 0), hospital, font=font_hospital)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
-        x = (CARD_WIDTH - w) // 2
-        y = (HEADER_HEIGHT - h) // 2
-        draw.text((x, y), hospital, fill="white", font=font_hospital)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        draw.text(
+            ((CARD_WIDTH - text_w) // 2, (HEADER_HEIGHT - text_h) // 2),
+            hospital,
+            fill="white",
+            font=font_hospital
+        )
 
-        # Photo with dark gray border
+        # Photo + border
         photo_x = 50
         photo_y = HEADER_HEIGHT + 30
+
         draw.rectangle(
             [
                 (photo_x - PHOTO_BORDER, photo_y - PHOTO_BORDER),
@@ -116,37 +127,33 @@ def index():
             ],
             fill=GRAY
         )
+
         card.paste(photo_img, (photo_x, photo_y))
 
-        # Text details next to photo
+        # Text
         text_x = 350
         text_y = HEADER_HEIGHT + 80
         draw.text((text_x, text_y), name, fill="white", font=font_name)
         draw.text((text_x, text_y + 70), position, fill="white", font=font_position)
         draw.text((text_x, text_y + 120), department, fill="white", font=font_department)
 
-        # Save file using user's name
+        # Save output
         filename = name.replace(" ", "_") + ".png"
         output_path = os.path.join(OUTPUT_DIR, filename)
         card.save(output_path)
 
-        # Save image to memory for email
+        # Email image
         img_bytes = BytesIO()
         card.save(img_bytes, format="PNG")
         img_bytes.seek(0)
+        send_email(email, filename, img_bytes.read())
 
-        # Send email
-        if SENDER_PASSWORD:
-            send_email(email, filename, img_bytes.read())
-
-        # Render success page
-        return render_template("success.html",
-                               name=name,
-                               filename=filename)
+        return render_template("success.html", name=name, filename=filename)
 
     return render_template("index.html")
 
 
 # ======= RUN SERVER =======
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
