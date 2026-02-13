@@ -26,12 +26,10 @@ HEADER_HEIGHT = 120
 GRAY = (80, 80, 80)
 PHOTO_BORDER = 6
 
-# ✅ ENVIRONMENT VARIABLES (SAFE)
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 
 # ========================================
-
 
 def send_email(receiver, filename, image_bytes):
     if not SENDER_EMAIL or not SENDER_PASSWORD:
@@ -64,8 +62,6 @@ def send_email(receiver, filename, image_bytes):
         print("Email sending failed:", e)
 
 
-# ================== ROUTES ==================
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
@@ -76,11 +72,9 @@ def index():
         hospital = "FRONTIER REGIONAL HOSPITAL"
         photo = request.files["photo"]
 
-        # Save uploaded photo temporarily
         temp_photo = os.path.join(OUTPUT_DIR, "temp.png")
         photo.save(temp_photo)
 
-        # Load images
         background = Image.open(BACKGROUND_IMAGE).resize((CARD_WIDTH, CARD_HEIGHT))
         logo = Image.open(LOGO_IMAGE).resize((150, 80))
         photo_img = Image.open(temp_photo).resize((250, 300))
@@ -88,14 +82,11 @@ def index():
         card = background.copy()
         draw = ImageDraw.Draw(card)
 
-        # Header
         draw.rectangle([(0, 0), (CARD_WIDTH, HEADER_HEIGHT)], fill=GRAY)
 
-        # Logo
         logo_y = (HEADER_HEIGHT - logo.height) // 2
         card.paste(logo, (30, logo_y), logo.convert("RGBA"))
 
-        # Fonts
         try:
             font_name = ImageFont.truetype("arialbd.ttf", 50)
             font_position = ImageFont.truetype("arial.ttf", 32)
@@ -104,10 +95,10 @@ def index():
         except:
             font_name = font_position = font_department = font_hospital = ImageFont.load_default()
 
-        # Hospital name centered
         bbox = draw.textbbox((0, 0), hospital, font=font_hospital)
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
+
         draw.text(
             ((CARD_WIDTH - text_w) // 2, (HEADER_HEIGHT - text_h) // 2),
             hospital,
@@ -115,7 +106,6 @@ def index():
             font=font_hospital
         )
 
-        # Photo + border
         photo_x = 50
         photo_y = HEADER_HEIGHT + 30
 
@@ -130,19 +120,17 @@ def index():
 
         card.paste(photo_img, (photo_x, photo_y))
 
-        # Text
         text_x = 350
         text_y = HEADER_HEIGHT + 80
+
         draw.text((text_x, text_y), name, fill="white", font=font_name)
         draw.text((text_x, text_y + 70), position, fill="white", font=font_position)
         draw.text((text_x, text_y + 120), department, fill="white", font=font_department)
 
-        # Save output
         filename = name.replace(" ", "_") + ".png"
         output_path = os.path.join(OUTPUT_DIR, filename)
         card.save(output_path)
 
-        # Email image
         img_bytes = BytesIO()
         card.save(img_bytes, format="PNG")
         img_bytes.seek(0)
@@ -153,7 +141,6 @@ def index():
     return render_template("index.html")
 
 
-# ======= RUN SERVER =======
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
